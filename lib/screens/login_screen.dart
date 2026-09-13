@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'cadastro_paciente_screen.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 
@@ -35,13 +35,14 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _cadastrar() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Tela de cadastro será implementada em breve.'),
-      ),
-    );
-  }
+ void _cadastrar() {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => const CadastroPacienteScreen(),
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
