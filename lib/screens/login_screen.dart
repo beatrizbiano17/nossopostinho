@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'cadastro_paciente_screen.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
+import 'home_screen.dart';
+import '../services/apiservice.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -25,16 +27,47 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _entrar() {
-    if (_formKey.currentState!.validate()) {
+Future<void> _entrar() async {
+  if (!_formKey.currentState!.validate()) {
+    return;
+  }
+
+  try {
+    final resultado = await ApiService.fazerLogin(
+      _cpfController.text,
+      _senhaController.text,
+    );
+
+    if (!mounted) return;
+
+    if (resultado["sucesso"] == true) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const HomeScreen(),
+        ),
+      );
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Login validado!'),
+        SnackBar(
+          content: Text(
+            resultado["mensagem"] ?? "CPF ou senha incorretos.",
+          ),
         ),
       );
     }
-  }
+  } catch (e) {
+    if (!mounted) return;
 
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          "Não foi possível conectar com o servidor.",
+        ),
+      ),
+    );
+  }
+}
  void _cadastrar() {
   Navigator.push(
     context,

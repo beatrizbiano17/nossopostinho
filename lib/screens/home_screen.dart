@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'agendaprofissionais_screen.dart';
 import 'perfil_screen.dart';
 import 'consultas_screen.dart';
 import 'encaminhamentos_screen.dart';
@@ -285,6 +285,24 @@ class HomeScreen extends StatelessWidget {
                         MaterialPageRoute(
                           builder: (context) =>
                               const HistoricoScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                 const SizedBox(width: 12),
+                // --------------------------------------------------
+                // AGENDA DE PROFISSINAIS
+                // --------------------------------------------------
+                Expanded(
+                  child:_BotaoAtalho(
+                    icone: Icons.people,
+                    titulo: 'Profissionais',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AgendaProfissionaisScreen(),
                         ),
                       );
                     },

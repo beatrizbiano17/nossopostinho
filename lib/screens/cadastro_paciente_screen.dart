@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/apiservice.dart';
 import 'home_screen.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
@@ -27,8 +28,12 @@ class _CadastroPacienteScreenState
   final TextEditingController _confirmarSenhaController =
       TextEditingController();
 
+  final TextEditingController _dataNascimentoController =
+      TextEditingController();
+
   bool _mostrarSenha = false;
   bool _mostrarConfirmacao = false;
+  bool _cadastrando = false;
 
   @override
   void dispose() {
@@ -36,21 +41,101 @@ class _CadastroPacienteScreenState
     _cpfController.dispose();
     _senhaController.dispose();
     _confirmarSenhaController.dispose();
+    _dataNascimentoController.dispose();
 
     super.dispose();
   }
 
-void _cadastrar() {
-  if (_formKey.currentState!.validate()) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const HomeScreen(),
-      ),
+  // Escolher data de nascimento
+  Future<void> _selecionarData() async {
+    final DateTime? dataEscolhida = await showDatePicker(
+      context: context,
+      initialDate: DateTime(2008),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      helpText: 'Selecione sua data de nascimento',
     );
-  }
-}
 
+    if (dataEscolhida != null) {
+      final dia = dataEscolhida.day.toString().padLeft(2, '0');
+      final mes = dataEscolhida.month.toString().padLeft(2, '0');
+      final ano = dataEscolhida.year.toString();
+
+      setState(() {
+        _dataNascimentoController.text = '$dia/$mes/$ano';
+      });
+    }
+  }
+
+  Future<void> _cadastrar() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      _cadastrando = true;
+    });
+
+    try {
+      // Converte DD/MM/AAAA para AAAA-MM-DD
+      final partes =
+          _dataNascimentoController.text.split('/');
+
+      final dataNascimento =
+          '${partes[2]}-${partes[1]}-${partes[0]}';
+
+      final resultado = await ApiService.fazerCadastro(
+        cpf: _cpfController.text.trim(),
+        senha: _senhaController.text,
+        nome: _nomeController.text.trim(),
+        dataNascimento: dataNascimento,
+      );
+
+      if (!mounted) return;
+
+      if (resultado['sucesso'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Cadastro realizado com sucesso!',
+            ),
+          ),
+        );
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const HomeScreen(),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              resultado['mensagem'] ??
+                  'Não foi possível realizar o cadastro.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Não foi possível conectar com o servidor.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _cadastrando = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +160,9 @@ void _cadastrar() {
             key: _formKey,
 
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment:
+                  CrossAxisAlignment.stretch,
+
               children: [
                 // Logo
                 Center(
@@ -117,10 +204,12 @@ void _cadastrar() {
                 TextFormField(
                   controller: _nomeController,
                   keyboardType: TextInputType.name,
-                  textCapitalization: TextCapitalization.words,
+                  textCapitalization:
+                      TextCapitalization.words,
 
                   decoration: const InputDecoration(
-                    hintText: 'Digite seu nome completo',
+                    hintText:
+                        'Digite seu nome completo',
                     prefixIcon: Icon(
                       Icons.person_outline,
                       color: AppColors.azulMedio,
@@ -179,6 +268,42 @@ void _cadastrar() {
 
                 const SizedBox(height: 20),
 
+                // Data de nascimento
+                Text(
+                  'Data de nascimento',
+                  style: AppTextStyles.subtitulo,
+                ),
+
+                const SizedBox(height: 8),
+
+                TextFormField(
+                  controller:
+                      _dataNascimentoController,
+                  readOnly: true,
+
+                  onTap: _selecionarData,
+
+                  decoration: const InputDecoration(
+                    hintText:
+                        'Selecione sua data de nascimento',
+                    prefixIcon: Icon(
+                      Icons.calendar_month,
+                      color: AppColors.azulMedio,
+                    ),
+                  ),
+
+                  validator: (value) {
+                    if (value == null ||
+                        value.isEmpty) {
+                      return 'Selecione sua data de nascimento.';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 20),
+
                 // Senha
                 Text(
                   'Senha',
@@ -202,7 +327,8 @@ void _cadastrar() {
                     suffixIcon: IconButton(
                       onPressed: () {
                         setState(() {
-                          _mostrarSenha = !_mostrarSenha;
+                          _mostrarSenha =
+                              !_mostrarSenha;
                         });
                       },
 
@@ -240,11 +366,14 @@ void _cadastrar() {
                 const SizedBox(height: 8),
 
                 TextFormField(
-                  controller: _confirmarSenhaController,
-                  obscureText: !_mostrarConfirmacao,
+                  controller:
+                      _confirmarSenhaController,
+                  obscureText:
+                      !_mostrarConfirmacao,
 
                   decoration: InputDecoration(
-                    hintText: 'Digite sua senha novamente',
+                    hintText:
+                        'Digite sua senha novamente',
 
                     prefixIcon: const Icon(
                       Icons.lock_outline,
@@ -274,7 +403,8 @@ void _cadastrar() {
                       return 'Confirme sua senha.';
                     }
 
-                    if (value != _senhaController.text) {
+                    if (value !=
+                        _senhaController.text) {
                       return 'As senhas não são iguais.';
                     }
 
@@ -289,12 +419,23 @@ void _cadastrar() {
                   height: 52,
 
                   child: ElevatedButton(
-                    onPressed: _cadastrar,
+                    onPressed:
+                        _cadastrando ? null : _cadastrar,
 
-                    child: Text(
-                      'CADASTRAR',
-                      style: AppTextStyles.botao,
-                    ),
+                    child: _cadastrando
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child:
+                                CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(
+                            'CADASTRAR',
+                            style:
+                                AppTextStyles.botao,
+                          ),
                   ),
                 ),
 
@@ -307,8 +448,11 @@ void _cadastrar() {
 
                   child: Text(
                     'Já tenho uma conta',
-                    style: AppTextStyles.textoPequeno.copyWith(
-                      color: AppColors.azulEscuro,
+                    style:
+                        AppTextStyles.textoPequeno
+                            .copyWith(
+                      color:
+                          AppColors.azulEscuro,
                     ),
                   ),
                 ),
