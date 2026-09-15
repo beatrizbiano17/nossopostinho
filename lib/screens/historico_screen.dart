@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import '../services/apiservice.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 
@@ -13,30 +13,11 @@ class HistoricoScreen extends StatefulWidget {
 class _HistoricoScreenState extends State<HistoricoScreen> {
   int _abaSelecionada = 0;
 
-  final List<Map<String, String>> atendimentos = const [
-    {
-      'data': '12/08/2026',
-      'profissional': 'Dra. Ana Souza',
-      'especialidade': 'Clínica Geral',
-      'ubs': 'UBS Central',
-      'descricao': 'Consulta de rotina.',
-    },
-    {
-      'data': '20/06/2026',
-      'profissional': 'Dr. Carlos Oliveira',
-      'especialidade': 'Clínica Geral',
-      'ubs': 'UBS Central',
-      'descricao': 'Avaliação de saúde.',
-    },
-    {
-      'data': '15/04/2026',
-      'profissional': 'Dra. Mariana Costa',
-      'especialidade': 'Enfermagem',
-      'ubs': 'UBS do Bairro',
-      'descricao': 'Acompanhamento de saúde.',
-    },
-  ];
+  // Atendimentos vindos da API
+  List<Map<String, dynamic>> atendimentos = [];
 
+  // Dados temporários das vacinas.
+  // A integração com o banco será feita depois.
   final List<Map<String, String>> vacinas = const [
     {
       'vacina': 'Influenza',
@@ -58,6 +39,70 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     },
   ];
 
+  bool carregando = true;
+  String? erro;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _carregarAtendimentos();
+  }
+
+  // ============================================================
+  // BUSCAR ATENDIMENTOS NA API
+  // ============================================================
+
+  Future<void> _carregarAtendimentos() async {
+    try {
+      final resultado =
+          await ApiService.buscarHistorico();
+
+      if (!mounted) return;
+
+      if (resultado["sucesso"] == true) {
+        setState(() {
+          atendimentos =
+              List<Map<String, dynamic>>.from(
+            resultado["atendimentos"] ?? [],
+          );
+
+          carregando = false;
+          erro = null;
+        });
+      } else {
+        setState(() {
+          carregando = false;
+          erro = resultado["mensagem"] ??
+              "Não foi possível carregar o histórico.";
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        carregando = false;
+        erro = "Não foi possível conectar com o servidor.";
+      });
+    }
+  }
+
+  // ============================================================
+  // FORMATAR DATA
+  // ============================================================
+
+  String _formatarData(String data) {
+    if (data.length >= 10) {
+      final partes = data.substring(0, 10).split('-');
+
+      if (partes.length == 3) {
+        return '${partes[2]}/${partes[1]}/${partes[0]}';
+      }
+    }
+
+    return data;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -74,9 +119,14 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
         children: [
           const SizedBox(height: 15),
 
-          // Abas
+          // ====================================================
+          // ABAS
+          // ====================================================
+
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20,
+            ),
 
             child: Row(
               children: [
@@ -84,6 +134,7 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                   child: _BotaoAba(
                     titulo: 'Atendimentos',
                     selecionado: _abaSelecionada == 0,
+
                     onTap: () {
                       setState(() {
                         _abaSelecionada = 0;
@@ -98,6 +149,7 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                   child: _BotaoAba(
                     titulo: 'Vacinação',
                     selecionado: _abaSelecionada == 1,
+
                     onTap: () {
                       setState(() {
                         _abaSelecionada = 1;
@@ -113,9 +165,7 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
 
           Expanded(
             child: _abaSelecionada == 0
-                ? _ListaAtendimentos(
-                    atendimentos: atendimentos,
-                  )
+                ? _conteudoAtendimentos()
                 : _ListaVacinas(
                     vacinas: vacinas,
                   ),
@@ -124,8 +174,78 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
       ),
     );
   }
-}
 
+  // ============================================================
+  // CONTEÚDO DOS ATENDIMENTOS
+  // ============================================================
+
+  Widget _conteudoAtendimentos() {
+    // Enquanto carrega
+    if (carregando) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    // Caso aconteça algum erro
+    if (erro != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(30),
+
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 70,
+                color: AppColors.azulMedio,
+              ),
+
+              const SizedBox(height: 20),
+
+              Text(
+                'Não foi possível carregar o histórico.',
+                style: AppTextStyles.subtitulo,
+                textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 10),
+
+              Text(
+                erro!,
+                style: AppTextStyles.texto,
+                textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 20),
+
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    carregando = true;
+                    erro = null;
+                  });
+
+                  _carregarAtendimentos();
+                },
+
+                child: const Text(
+                  'Tentar novamente',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return _ListaAtendimentos(
+      atendimentos: atendimentos,
+    );
+  }
+}
 
 // ============================================================
 // BOTÃO DAS ABAS
@@ -162,6 +282,7 @@ class _BotaoAba extends StatelessWidget {
 
         child: Text(
           titulo,
+
           style: AppTextStyles.texto.copyWith(
             color: selecionado
                 ? AppColors.branco
@@ -177,13 +298,12 @@ class _BotaoAba extends StatelessWidget {
   }
 }
 
-
 // ============================================================
 // LISTA DE ATENDIMENTOS
 // ============================================================
 
 class _ListaAtendimentos extends StatelessWidget {
-  final List<Map<String, String>> atendimentos;
+  final List<Map<String, dynamic>> atendimentos;
 
   const _ListaAtendimentos({
     required this.atendimentos,
@@ -211,22 +331,53 @@ class _ListaAtendimentos extends StatelessWidget {
       itemBuilder: (context, index) {
         final atendimento = atendimentos[index];
 
+        String data =
+            atendimento['data_atendimento']?.toString() ?? '';
+
+        // Formata a data
+        if (data.length >= 10) {
+          final partes =
+              data.substring(0, 10).split('-');
+
+          if (partes.length == 3) {
+            data =
+                '${partes[2]}/${partes[1]}/${partes[0]}';
+          }
+        }
+
         return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.only(
+            bottom: 16,
+          ),
 
           child: _AtendimentoCard(
-            data: atendimento['data']!,
-            profissional: atendimento['profissional']!,
-            especialidade: atendimento['especialidade']!,
-            ubs: atendimento['ubs']!,
-            descricao: atendimento['descricao']!,
+            data: data,
+
+            profissional:
+                atendimento['profissional_nome']
+                        ?.toString() ??
+                    'Profissional não informado',
+
+            especialidade:
+                atendimento['especialidade']
+                        ?.toString() ??
+                    'Especialidade não informada',
+
+            ubs:
+                atendimento['ubs_nome']
+                        ?.toString() ??
+                    'UBS não informada',
+
+            descricao:
+                atendimento['descricao']
+                        ?.toString() ??
+                    'Nenhuma descrição informada.',
           ),
         );
       },
     );
   }
 }
-
 
 // ============================================================
 // CARD DE ATENDIMENTO
@@ -263,7 +414,9 @@ class _AtendimentoCard extends StatelessWidget {
 
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(
+              alpha: 0.05,
+            ),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),
@@ -271,7 +424,8 @@ class _AtendimentoCard extends StatelessWidget {
       ),
 
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
 
         children: [
           Row(
@@ -282,7 +436,8 @@ class _AtendimentoCard extends StatelessWidget {
 
                 decoration: BoxDecoration(
                   color: AppColors.azulClaro,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius:
+                      BorderRadius.circular(12),
                 ),
 
                 child: const Icon(
@@ -302,14 +457,16 @@ class _AtendimentoCard extends StatelessWidget {
                   children: [
                     Text(
                       especialidade,
-                      style: AppTextStyles.subtitulo,
+                      style:
+                          AppTextStyles.subtitulo,
                     ),
 
                     const SizedBox(height: 3),
 
                     Text(
                       profissional,
-                      style: AppTextStyles.textoPequeno,
+                      style:
+                          AppTextStyles.textoPequeno,
                     ),
                   ],
                 ),
@@ -317,7 +474,9 @@ class _AtendimentoCard extends StatelessWidget {
 
               Text(
                 data,
-                style: AppTextStyles.textoPequeno.copyWith(
+
+                style:
+                    AppTextStyles.textoPequeno.copyWith(
                   color: AppColors.azulMedio,
                   fontWeight: FontWeight.bold,
                 ),
@@ -351,7 +510,6 @@ class _AtendimentoCard extends StatelessWidget {
     );
   }
 }
-
 
 // ============================================================
 // LISTA DE VACINAS
@@ -387,7 +545,9 @@ class _ListaVacinas extends StatelessWidget {
         final vacina = vacinas[index];
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.only(
+            bottom: 16,
+          ),
 
           child: _VacinaCard(
             vacina: vacina['vacina']!,
@@ -400,7 +560,6 @@ class _ListaVacinas extends StatelessWidget {
     );
   }
 }
-
 
 // ============================================================
 // CARD DE VACINA
@@ -435,7 +594,9 @@ class _VacinaCard extends StatelessWidget {
 
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(
+              alpha: 0.05,
+            ),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),
@@ -450,7 +611,8 @@ class _VacinaCard extends StatelessWidget {
 
             decoration: BoxDecoration(
               color: AppColors.azulClaro,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius:
+                  BorderRadius.circular(12),
             ),
 
             child: const Icon(
@@ -484,14 +646,16 @@ class _VacinaCard extends StatelessWidget {
 
                 Text(
                   'Aplicada em $data',
-                  style: AppTextStyles.textoPequeno,
+                  style:
+                      AppTextStyles.textoPequeno,
                 ),
 
                 const SizedBox(height: 4),
 
                 Text(
                   local,
-                  style: AppTextStyles.textoPequeno.copyWith(
+                  style:
+                      AppTextStyles.textoPequeno.copyWith(
                     color: AppColors.azulMedio,
                   ),
                 ),
@@ -509,7 +673,6 @@ class _VacinaCard extends StatelessWidget {
     );
   }
 }
-
 
 // ============================================================
 // INFORMAÇÃO DO HISTÓRICO
@@ -529,7 +692,8 @@ class _InformacaoHistorico extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
 
       children: [
         Icon(
@@ -560,7 +724,6 @@ class _InformacaoHistorico extends StatelessWidget {
   }
 }
 
-
 // ============================================================
 // SEM HISTÓRICO
 // ============================================================
@@ -581,7 +744,8 @@ class _SemHistorico extends StatelessWidget {
         padding: const EdgeInsets.all(30),
 
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment:
+              MainAxisAlignment.center,
 
           children: [
             Icon(

@@ -1,36 +1,104 @@
 import 'package:flutter/material.dart';
-
+import '../services/apiservice.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 
-class EncaminhamentosScreen extends StatelessWidget {
+class EncaminhamentosScreen extends StatefulWidget {
   const EncaminhamentosScreen({super.key});
 
-  // Dados temporários para testar a tela.
-  // Depois serão substituídos pelos dados vindos da API.
-  final List<Map<String, String>> encaminhamentos = const [
-    {
-      'especialidade': 'Cardiologia',
-      'profissional': 'Dra. Ana Souza',
-      'data': '10/08/2026',
-      'ubs': 'UBS Central',
-      'status': 'Em análise',
-    },
-    {
-      'especialidade': 'Oftalmologia',
-      'profissional': 'Dr. Carlos Oliveira',
-      'data': '25/07/2026',
-      'ubs': 'UBS Central',
-      'status': 'Aguardando agendamento',
-    },
-    {
-      'especialidade': 'Dermatologia',
-      'profissional': 'Dra. Mariana Costa',
-      'data': '12/06/2026',
-      'ubs': 'UBS do Bairro',
-      'status': 'Concluído',
-    },
-  ];
+  @override
+  State<EncaminhamentosScreen> createState() =>
+      _EncaminhamentosScreenState();
+}
+
+class _EncaminhamentosScreenState
+    extends State<EncaminhamentosScreen> {
+
+  List<Map<String, dynamic>> encaminhamentos = [];
+
+  bool carregando = true;
+  String? erro;
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarEncaminhamentos();
+  }
+
+  // Busca os encaminhamentos na API
+  Future<void> _carregarEncaminhamentos() async {
+    try {
+      final resultado =
+          await ApiService.buscarEncaminhamentos();
+
+      if (!mounted) return;
+
+      if (resultado["sucesso"] == true) {
+        setState(() {
+          encaminhamentos =
+              List<Map<String, dynamic>>.from(
+            resultado["encaminhamentos"] ?? [],
+          );
+
+          carregando = false;
+          erro = null;
+        });
+      } else {
+        setState(() {
+          carregando = false;
+          erro = resultado["mensagem"] ??
+              "Não foi possível carregar os encaminhamentos.";
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        carregando = false;
+        erro = "Não foi possível conectar com o servidor.";
+      });
+    }
+  }
+
+  // Formata a data do banco
+  // 2026-09-10 → 10/09/2026
+  String _formatarData(String data) {
+    if (data.length >= 10) {
+      final partes = data.substring(0, 10).split('-');
+
+      if (partes.length == 3) {
+        return '${partes[2]}/${partes[1]}/${partes[0]}';
+      }
+    }
+
+    return data;
+  }
+
+  // Deixa o status mais bonito para a tela
+  String _formatarStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'solicitado':
+        return 'Solicitado';
+
+      case 'em_analise':
+        return 'Em análise';
+
+      case 'aprovado':
+        return 'Aprovado';
+
+      case 'agendado':
+        return 'Agendado';
+
+      case 'concluido':
+        return 'Concluído';
+
+      case 'concluído':
+        return 'Concluído';
+
+      default:
+        return status;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,32 +112,116 @@ class EncaminhamentosScreen extends StatelessWidget {
         ),
       ),
 
-      body: encaminhamentos.isEmpty
-          ? const _SemEncaminhamentos()
-          : ListView.builder(
-              padding: const EdgeInsets.all(20),
-              itemCount: encaminhamentos.length,
-              itemBuilder: (context, index) {
-                final encaminhamento = encaminhamentos[index];
+      body: _conteudo(),
+    );
+  }
 
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 18),
-                  child: _EncaminhamentoCard(
-                    especialidade:
-                        encaminhamento['especialidade']!,
-                    profissional:
-                        encaminhamento['profissional']!,
-                    data: encaminhamento['data']!,
-                    ubs: encaminhamento['ubs']!,
-                    status: encaminhamento['status']!,
-                  ),
-                );
-              },
+  Widget _conteudo() {
+    // Enquanto busca os dados
+    if (carregando) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    // Caso aconteça algum erro
+    if (erro != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(30),
+
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 70,
+                color: AppColors.azulMedio,
+              ),
+
+              const SizedBox(height: 20),
+
+              Text(
+                'Não foi possível carregar os encaminhamentos.',
+                style: AppTextStyles.subtitulo,
+                textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 10),
+
+              Text(
+                erro!,
+                style: AppTextStyles.texto,
+                textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 20),
+
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    carregando = true;
+                    erro = null;
+                  });
+
+                  _carregarEncaminhamentos();
+                },
+                child: const Text('Tentar novamente'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Se não existem encaminhamentos
+    if (encaminhamentos.isEmpty) {
+      return const _SemEncaminhamentos();
+    }
+
+    // Mostra os encaminhamentos
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+
+      itemCount: encaminhamentos.length,
+
+      itemBuilder: (context, index) {
+        final encaminhamento =
+            encaminhamentos[index];
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 18),
+
+          child: _EncaminhamentoCard(
+            especialidade:
+                encaminhamento['especialidade']?.toString() ??
+                    'Especialidade não informada',
+
+            profissional:
+                encaminhamento['profissional_nome']?.toString() ??
+                    'Profissional não informado',
+
+            data: _formatarData(
+              encaminhamento['data_encaminhamento']
+                      ?.toString() ??
+                  '',
             ),
+
+            ubs:
+                encaminhamento['ubs_nome']?.toString() ??
+                    'UBS não informada',
+
+            status: _formatarStatus(
+              encaminhamento['status']?.toString() ??
+                  '',
+            ),
+          ),
+        );
+      },
     );
   }
 }
-
 
 // ============================================================
 // CARD DO ENCAMINHAMENTO
@@ -115,6 +267,7 @@ class _EncaminhamentoCard extends StatelessWidget {
 
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+
         children: [
           // Cabeçalho
           Row(
@@ -139,7 +292,9 @@ class _EncaminhamentoCard extends StatelessWidget {
 
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+
                   children: [
                     Text(
                       especialidade,
@@ -150,7 +305,8 @@ class _EncaminhamentoCard extends StatelessWidget {
 
                     Text(
                       'Encaminhamento médico',
-                      style: AppTextStyles.textoPequeno.copyWith(
+                      style:
+                          AppTextStyles.textoPequeno.copyWith(
                         color: AppColors.azulMedio,
                       ),
                     ),
@@ -211,7 +367,6 @@ class _EncaminhamentoCard extends StatelessWidget {
   }
 }
 
-
 // ============================================================
 // STATUS DO ENCAMINHAMENTO
 // ============================================================
@@ -227,17 +382,31 @@ class _StatusEncaminhamento extends StatelessWidget {
   Widget build(BuildContext context) {
     IconData icone;
 
-    switch (status) {
-      case 'Concluído':
+    switch (status.toLowerCase()) {
+      case 'concluído':
+      case 'concluido':
         icone = Icons.check_circle_outline;
         break;
 
-      case 'Aguardando agendamento':
-        icone = Icons.schedule_outlined;
+      case 'agendado':
+        icone = Icons.event_available_outlined;
+        break;
+
+      case 'aprovado':
+        icone = Icons.check_circle_outline;
+        break;
+
+      case 'em análise':
+      case 'em_analise':
+        icone = Icons.search_outlined;
+        break;
+
+      case 'solicitado':
+        icone = Icons.hourglass_empty;
         break;
 
       default:
-        icone = Icons.hourglass_empty;
+        icone = Icons.info_outline;
     }
 
     return Container(
@@ -266,6 +435,7 @@ class _StatusEncaminhamento extends StatelessWidget {
           Expanded(
             child: Text(
               status,
+
               style: AppTextStyles.texto.copyWith(
                 color: AppColors.azulEscuro,
                 fontWeight: FontWeight.bold,
@@ -278,12 +448,12 @@ class _StatusEncaminhamento extends StatelessWidget {
   }
 }
 
-
 // ============================================================
 // INFORMAÇÕES DO ENCAMINHAMENTO
 // ============================================================
 
-class _InformacaoEncaminhamento extends StatelessWidget {
+class _InformacaoEncaminhamento
+    extends StatelessWidget {
   final IconData icone;
   final String titulo;
   final String valor;
@@ -326,12 +496,12 @@ class _InformacaoEncaminhamento extends StatelessWidget {
   }
 }
 
-
 // ============================================================
 // QUANDO NÃO HÁ ENCAMINHAMENTOS
 // ============================================================
 
-class _SemEncaminhamentos extends StatelessWidget {
+class _SemEncaminhamentos
+    extends StatelessWidget {
   const _SemEncaminhamentos();
 
   @override
@@ -341,7 +511,8 @@ class _SemEncaminhamentos extends StatelessWidget {
         padding: const EdgeInsets.all(30),
 
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment:
+              MainAxisAlignment.center,
 
           children: [
             Icon(

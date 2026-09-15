@@ -1,39 +1,100 @@
-  import 'package:flutter/material.dart';
-
+import 'package:flutter/material.dart';
+import '../services/apiservice.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 
-class ConsultasScreen extends StatelessWidget {
+class ConsultasScreen extends StatefulWidget {
   const ConsultasScreen({super.key});
 
-  // Dados temporários para testar a tela.
-  // Depois serão substituídos pelos dados vindos do banco.
-  final List<Map<String, String>> consultas = const [
-    {
-      'profissional': 'Dra. Ana Souza',
-      'especialidade': 'Clínica Geral',
-      'data': '15/09/2026',
-      'horario': '14:30',
-      'ubs': 'UBS Central',
-      'status': 'Agendada',
-    },
-    {
-      'profissional': 'Dr. Carlos Oliveira',
-      'especialidade': 'Clínica Geral',
-      'data': '28/09/2026',
-      'horario': '09:00',
-      'ubs': 'UBS Central',
-      'status': 'Agendada',
-    },
-    {
-      'profissional': 'Dra. Mariana Costa',
-      'especialidade': 'Enfermagem',
-      'data': '05/10/2026',
-      'horario': '10:30',
-      'ubs': 'UBS do Bairro',
-      'status': 'Agendada',
-    },
-  ];
+  @override
+  State<ConsultasScreen> createState() => _ConsultasScreenState();
+}
+
+class _ConsultasScreenState extends State<ConsultasScreen> {
+  List<Map<String, dynamic>> consultas = [];
+
+  bool carregando = true;
+  String? erro;
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarConsultas();
+  }
+
+  // Busca as consultas na API
+  Future<void> _carregarConsultas() async {
+    try {
+      final resultado = await ApiService.buscarConsultas();
+
+      if (!mounted) return;
+
+      if (resultado["sucesso"] == true) {
+        setState(() {
+          consultas = List<Map<String, dynamic>>.from(
+            resultado["consultas"] ?? [],
+          );
+
+          carregando = false;
+          erro = null;
+        });
+      } else {
+        setState(() {
+          carregando = false;
+          erro = resultado["mensagem"] ?? "Não foi possível carregar as consultas.";
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        carregando = false;
+        erro = "Não foi possível conectar com o servidor.";
+      });
+    }
+  }
+
+  // Formata a data do banco: 2026-09-20 → 20/09/2026
+  String _formatarData(String data) {
+    if (data.length >= 10) {
+      final partes = data.substring(0, 10).split('-');
+
+      if (partes.length == 3) {
+        return '${partes[2]}/${partes[1]}/${partes[0]}';
+      }
+    }
+
+    return data;
+  }
+
+  // Formata o horário do banco: 14:30:00 → 14:30
+  String _formatarHorario(String horario) {
+    if (horario.length >= 5) {
+      return horario.substring(0, 5);
+    }
+
+    return horario;
+  }
+
+  // Deixa o status mais bonito para aparecer na tela
+  String _formatarStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'agendada':
+        return 'Agendada';
+
+      case 'realizada':
+        return 'Realizada';
+
+      case 'cancelada':
+        return 'Cancelada';
+
+      case 'faltou':
+        return 'Não compareceu';
+
+      default:
+        return status;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,31 +108,114 @@ class ConsultasScreen extends StatelessWidget {
         ),
       ),
 
-      body: consultas.isEmpty
-          ? _SemConsultas()
-          : ListView.builder(
-              padding: const EdgeInsets.all(20),
-              itemCount: consultas.length,
-              itemBuilder: (context, index) {
-                final consulta = consultas[index];
+      body: _conteudo(),
+    );
+  }
 
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 18),
-                  child: _ConsultaCard(
-                    profissional: consulta['profissional']!,
-                    especialidade: consulta['especialidade']!,
-                    data: consulta['data']!,
-                    horario: consulta['horario']!,
-                    ubs: consulta['ubs']!,
-                    status: consulta['status']!,
-                  ),
-                );
-              },
+  Widget _conteudo() {
+    // Enquanto busca os dados
+    if (carregando) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    // Se aconteceu algum erro
+    if (erro != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(30),
+
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 70,
+                color: AppColors.azulMedio,
+              ),
+
+              const SizedBox(height: 20),
+
+              Text(
+                'Não foi possível carregar as consultas.',
+                style: AppTextStyles.subtitulo,
+                textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 10),
+
+              Text(
+                erro!,
+                style: AppTextStyles.texto,
+                textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 20),
+
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    carregando = true;
+                    erro = null;
+                  });
+
+                  _carregarConsultas();
+                },
+                child: const Text('Tentar novamente'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Se não existem consultas
+    if (consultas.isEmpty) {
+      return const _SemConsultas();
+    }
+
+    // Mostra as consultas encontradas
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: consultas.length,
+
+      itemBuilder: (context, index) {
+        final consulta = consultas[index];
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 18),
+
+          child: _ConsultaCard(
+            profissional:
+                consulta['profissional_nome']?.toString() ??
+                    'Profissional não informado',
+
+            especialidade:
+                consulta['especialidade']?.toString() ??
+                    'Especialidade não informada',
+
+            data: _formatarData(
+              consulta['data_consulta']?.toString() ?? '',
             ),
+
+            horario: _formatarHorario(
+              consulta['horario']?.toString() ?? '',
+            ),
+
+            ubs:
+                consulta['ubs_nome']?.toString() ??
+                    'UBS não informada',
+
+            status: _formatarStatus(
+              consulta['status']?.toString() ?? '',
+            ),
+          ),
+        );
+      },
     );
   }
 }
-
 
 // ============================================================
 // CARD DA CONSULTA
@@ -119,6 +263,7 @@ class _ConsultaCard extends StatelessWidget {
 
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+
         children: [
           // Cabeçalho do card
           Row(
@@ -144,6 +289,7 @@ class _ConsultaCard extends StatelessWidget {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+
                   children: [
                     Text(
                       profissional,
@@ -162,7 +308,9 @@ class _ConsultaCard extends StatelessWidget {
                 ),
               ),
 
-              _StatusConsulta(status: status),
+              _StatusConsulta(
+                status: status,
+              ),
             ],
           ),
 
@@ -204,7 +352,6 @@ class _ConsultaCard extends StatelessWidget {
   }
 }
 
-
 // ============================================================
 // STATUS DA CONSULTA
 // ============================================================
@@ -231,6 +378,7 @@ class _StatusConsulta extends StatelessWidget {
 
       child: Text(
         status,
+
         style: AppTextStyles.textoPequeno.copyWith(
           color: AppColors.azulEscuro,
           fontWeight: FontWeight.bold,
@@ -239,7 +387,6 @@ class _StatusConsulta extends StatelessWidget {
     );
   }
 }
-
 
 // ============================================================
 // INFORMAÇÕES DA CONSULTA
@@ -288,12 +435,13 @@ class _InformacaoConsulta extends StatelessWidget {
   }
 }
 
-
 // ============================================================
 // QUANDO NÃO HÁ CONSULTAS
 // ============================================================
 
 class _SemConsultas extends StatelessWidget {
+  const _SemConsultas();
+
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -302,6 +450,7 @@ class _SemConsultas extends StatelessWidget {
 
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+
           children: [
             Icon(
               Icons.calendar_month_outlined,

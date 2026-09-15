@@ -1,49 +1,79 @@
 import 'package:flutter/material.dart';
-
+import '../services/apiservice.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 
-class MedicamentosScreen extends StatelessWidget {
+class MedicamentosScreen extends StatefulWidget {
   const MedicamentosScreen({super.key});
 
+  @override
+  State<MedicamentosScreen> createState() => _MedicamentosScreenState();
+}
+
+class _MedicamentosScreenState extends State<MedicamentosScreen> {
+  List<Map<String, dynamic>> medicamentos = [];
+
+  bool carregando = true;
+  String? erro;
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarMedicamentos();
+  }
+
   // ============================================================
-  // DADOS DE TESTE
+  // BUSCA OS MEDICAMENTOS NA API
   // ============================================================
 
-  final List<Map<String, String>> medicamentos = const [
-    {
-      'nome': 'Paracetamol',
-      'dosagem': '500 mg',
-      'uso': '1 comprimido a cada 8 horas',
-      'emissao': '10/08/2026',
-      'validade': '10/09/2026',
-      'status': 'Válida',
-    },
-    {
-      'nome': 'Amoxicilina',
-      'dosagem': '500 mg',
-      'uso': '1 cápsula a cada 8 horas',
-      'emissao': '15/08/2026',
-      'validade': '15/09/2026',
-      'status': 'Próxima do vencimento',
-    },
-    {
-      'nome': 'Losartana',
-      'dosagem': '50 mg',
-      'uso': '1 comprimido uma vez ao dia',
-      'emissao': '05/07/2026',
-      'validade': '05/10/2026',
-      'status': 'Válida',
-    },
-    {
-      'nome': 'Ibuprofeno',
-      'dosagem': '400 mg',
-      'uso': '1 comprimido a cada 8 horas',
-      'emissao': '01/06/2026',
-      'validade': '01/07/2026',
-      'status': 'Vencida',
-    },
-  ];
+  Future<void> _carregarMedicamentos() async {
+    try {
+      final resultado = await ApiService.buscarMedicamentos();
+
+      if (!mounted) return;
+
+      if (resultado['sucesso'] == true) {
+        setState(() {
+          medicamentos = List<Map<String, dynamic>>.from(
+            resultado['medicamentos'] ?? [],
+          );
+
+          carregando = false;
+          erro = null;
+        });
+      } else {
+        setState(() {
+          carregando = false;
+          erro = resultado['mensagem'] ??
+              'Não foi possível carregar os medicamentos.';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        carregando = false;
+        erro = 'Não foi possível conectar com o servidor.';
+      });
+    }
+  }
+
+  // ============================================================
+  // FORMATA O HORÁRIO
+  // 08:00:00 → 08:00
+  // ============================================================
+
+  String _formatarHorario(String? horario) {
+    if (horario == null || horario.isEmpty) {
+      return 'Horário não informado';
+    }
+
+    if (horario.length >= 5) {
+      return horario.substring(0, 5);
+    }
+
+    return horario;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,41 +87,117 @@ class MedicamentosScreen extends StatelessWidget {
         ),
       ),
 
-      body: medicamentos.isEmpty
-          ? const _SemMedicamentos()
-          : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(
-                20,
-                20,
-                20,
-                30,
+      body: _conteudo(),
+    );
+  }
+
+  // ============================================================
+  // CONTEÚDO DA TELA
+  // ============================================================
+
+  Widget _conteudo() {
+    // Carregando
+    if (carregando) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    // Erro
+    if (erro != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(30),
+
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 70,
+                color: AppColors.azulMedio,
               ),
 
-              itemCount: medicamentos.length,
+              const SizedBox(height: 20),
 
-              itemBuilder: (context, index) {
-                final medicamento = medicamentos[index];
+              Text(
+                'Não foi possível carregar os medicamentos.',
+                style: AppTextStyles.subtitulo,
+                textAlign: TextAlign.center,
+              ),
 
-                return Padding(
-                  padding: const EdgeInsets.only(
-                    bottom: 16,
-                  ),
+              const SizedBox(height: 10),
 
-                  child: _MedicamentoCard(
-                    nome: medicamento['nome']!,
-                    dosagem: medicamento['dosagem']!,
-                    uso: medicamento['uso']!,
-                    emissao: medicamento['emissao']!,
-                    validade: medicamento['validade']!,
-                    status: medicamento['status']!,
-                  ),
-                );
-              },
+              Text(
+                erro!,
+                style: AppTextStyles.texto,
+                textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 20),
+
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    carregando = true;
+                    erro = null;
+                  });
+
+                  _carregarMedicamentos();
+                },
+                child: const Text(
+                  'Tentar novamente',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Nenhum medicamento
+    if (medicamentos.isEmpty) {
+      return const _SemMedicamentos();
+    }
+
+    // Lista de medicamentos
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        30,
+      ),
+
+      itemCount: medicamentos.length,
+
+      itemBuilder: (context, index) {
+        final medicamento = medicamentos[index];
+
+        return Padding(
+          padding: const EdgeInsets.only(
+            bottom: 16,
+          ),
+
+          child: _MedicamentoCard(
+            nome: medicamento['nome']?.toString() ??
+                'Medicamento não informado',
+
+            descricao: medicamento['descricao']?.toString() ??
+                'Sem descrição',
+
+            dosagem: medicamento['dosagem']?.toString() ??
+                'Dosagem não informada',
+
+            horario: _formatarHorario(
+              medicamento['horario']?.toString(),
             ),
+          ),
+        );
+      },
     );
   }
 }
-
 
 // ============================================================
 // CARD DO MEDICAMENTO
@@ -99,28 +205,19 @@ class MedicamentosScreen extends StatelessWidget {
 
 class _MedicamentoCard extends StatelessWidget {
   final String nome;
+  final String descricao;
   final String dosagem;
-  final String uso;
-  final String emissao;
-  final String validade;
-  final String status;
+  final String horario;
 
   const _MedicamentoCard({
     required this.nome,
+    required this.descricao,
     required this.dosagem,
-    required this.uso,
-    required this.emissao,
-    required this.validade,
-    required this.status,
+    required this.horario,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bool vencido = status == 'Vencida';
-
-    final bool proximoDoVencimento =
-        status == 'Próxima do vencimento';
-
     return Container(
       padding: const EdgeInsets.all(18),
 
@@ -130,16 +227,14 @@ class _MedicamentoCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(15),
 
         border: Border.all(
-          color: vencido
-              ? Colors.red.shade200
-              : proximoDoVencimento
-                  ? Colors.orange.shade200
-                  : AppColors.azulClaro,
+          color: AppColors.azulClaro,
         ),
 
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(
+              alpha: 0.05,
+            ),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),
@@ -187,197 +282,57 @@ class _MedicamentoCard extends StatelessWidget {
                   children: [
                     Text(
                       nome,
-                      style: AppTextStyles.subtitulo,
+                      style:
+                          AppTextStyles.subtitulo,
                     ),
 
                     const SizedBox(height: 4),
 
                     Text(
                       dosagem,
-                      style: AppTextStyles.texto,
+                      style:
+                          AppTextStyles.texto,
                     ),
                   ],
                 ),
-              ),
-
-              _StatusMedicamento(
-                status: status,
               ),
             ],
           ),
 
           const SizedBox(height: 18),
 
+          const Divider(
+            color: AppColors.azulClaro,
+          ),
+
+          const SizedBox(height: 14),
+
           // ==================================================
-          // FORMA DE USO
+          // DESCRIÇÃO
+          // ==================================================
+
+          _InformacaoMedicamento(
+            icone: Icons.info_outline,
+            titulo: 'Descrição',
+            valor: descricao,
+          ),
+
+          const SizedBox(height: 12),
+
+          // ==================================================
+          // HORÁRIO
           // ==================================================
 
           _InformacaoMedicamento(
             icone: Icons.schedule_outlined,
-            titulo: 'Como usar',
-            valor: uso,
-          ),
-
-          const SizedBox(height: 12),
-
-          // ==================================================
-          // DATA DE EMISSÃO
-          // ==================================================
-
-          _InformacaoMedicamento(
-            icone: Icons.calendar_today_outlined,
-            titulo: 'Receita emitida',
-            valor: emissao,
-          ),
-
-          const SizedBox(height: 12),
-
-          // ==================================================
-          // VALIDADE
-          // ==================================================
-
-          _InformacaoMedicamento(
-            icone: Icons.event_available_outlined,
-            titulo: 'Validade',
-            valor: validade,
-          ),
-
-          // ==================================================
-          // AVISO
-          // ==================================================
-
-          if (vencido || proximoDoVencimento) ...[
-            const SizedBox(height: 15),
-
-            Container(
-              width: double.infinity,
-
-              padding: const EdgeInsets.all(12),
-
-              decoration: BoxDecoration(
-                color: vencido
-                    ? Colors.red.shade50
-                    : Colors.orange.shade50,
-
-                borderRadius:
-                    BorderRadius.circular(10),
-              ),
-
-              child: Row(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-
-                children: [
-                  Icon(
-                    vencido
-                        ? Icons.error_outline
-                        : Icons.warning_amber_outlined,
-
-                    color: vencido
-                        ? Colors.red.shade700
-                        : Colors.orange.shade700,
-
-                    size: 22,
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  Expanded(
-                    child: Text(
-                      vencido
-                          ? 'A receita deste medicamento está vencida.'
-                          : 'A receita deste medicamento está próxima do vencimento.',
-
-                      style: AppTextStyles.textoPequeno.copyWith(
-                        color: vencido
-                            ? Colors.red.shade700
-                            : Colors.orange.shade700,
-
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-
-// ============================================================
-// STATUS DO MEDICAMENTO
-// ============================================================
-
-class _StatusMedicamento extends StatelessWidget {
-  final String status;
-
-  const _StatusMedicamento({
-    required this.status,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bool vencido = status == 'Vencida';
-
-    final bool proximoDoVencimento =
-        status == 'Próxima do vencimento';
-
-    Color cor;
-
-    IconData icone;
-
-    if (vencido) {
-      cor = Colors.red.shade700;
-      icone = Icons.cancel_outlined;
-    } else if (proximoDoVencimento) {
-      cor = Colors.orange.shade700;
-      icone = Icons.warning_amber_outlined;
-    } else {
-      cor = AppColors.azulMedio;
-      icone = Icons.check_circle_outline;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 5,
-      ),
-
-      decoration: BoxDecoration(
-        color: cor.withValues(alpha: 0.10),
-
-        borderRadius: BorderRadius.circular(20),
-      ),
-
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-
-        children: [
-          Icon(
-            icone,
-            color: cor,
-            size: 16,
-          ),
-
-          const SizedBox(width: 4),
-
-          Text(
-            status,
-            style: AppTextStyles.textoPequeno.copyWith(
-              color: cor,
-              fontWeight: FontWeight.bold,
-            ),
+            titulo: 'Horário',
+            valor: horario,
           ),
         ],
       ),
     );
   }
 }
-
 
 // ============================================================
 // INFORMAÇÃO DO MEDICAMENTO
@@ -428,7 +383,6 @@ class _InformacaoMedicamento extends StatelessWidget {
     );
   }
 }
-
 
 // ============================================================
 // NENHUM MEDICAMENTO

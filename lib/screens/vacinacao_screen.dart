@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import '../services/apiservice.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 
@@ -13,56 +13,153 @@ class VacinacaoScreen extends StatefulWidget {
 class _VacinacaoScreenState extends State<VacinacaoScreen> {
   int _abaSelecionada = 0;
 
-  final List<Map<String, String>> minhasVacinas = const [
-    {
-      'vacina': 'Influenza',
-      'dose': 'Dose anual',
-      'data': '05/05/2026',
-      'local': 'UBS Central',
-    },
-    {
-      'vacina': 'COVID-19',
-      'dose': 'Dose de reforço',
-      'data': '15/03/2026',
-      'local': 'UBS Central',
-    },
-    {
-      'vacina': 'Hepatite B',
-      'dose': '3ª dose',
-      'data': '10/01/2026',
-      'local': 'UBS do Bairro',
-    },
-  ];
+  bool _carregando = true;
+  String? _erro;
 
-  final List<Map<String, String>> proximasDoses = const [
-    {
-      'vacina': 'Febre Amarela',
-      'dose': 'Dose de reforço',
-      'data': '20/10/2026',
-      'local': 'UBS Central',
-    },
-    {
-      'vacina': 'Influenza',
-      'dose': 'Próxima dose anual',
-      'data': '05/05/2027',
-      'local': 'UBS Central',
-    },
-  ];
+  List<Map<String, String>> minhasVacinas = [];
+  List<Map<String, String>> proximasDoses = [];
+  List<Map<String, String>> campanhas = [];
 
-  final List<Map<String, String>> campanhas = const [
-    {
-      'titulo': 'Campanha de vacinação contra a gripe',
-      'descricao':
-          'Procure uma unidade de saúde participante para verificar sua situação vacinal.',
-      'periodo': 'Campanha em andamento',
-    },
-    {
-      'titulo': 'Atualização da caderneta de vacinação',
-      'descricao':
-          'Leve sua carteira de vacinação até a UBS para conferir se existem doses pendentes.',
-      'periodo': 'Disponível durante o ano',
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _carregarVacinacao();
+  }
+
+  // ============================================================
+  // CARREGAR DADOS DA API
+  // ============================================================
+
+  Future<void> _carregarVacinacao() async {
+    try {
+      final resultado = await ApiService.buscarVacinacao();
+
+      if (!mounted) return;
+
+      if (resultado["sucesso"] == true) {
+        setState(() {
+          minhasVacinas =
+              List<Map<String, dynamic>>.from(
+                resultado["vacinas"] ?? [],
+              ).map(
+                (vacina) => {
+                  "vacina": vacina["vacina"].toString(),
+                  "dose": vacina["dose"].toString(),
+                  "data": _formatarData(
+                    vacina["data"].toString(),
+                  ),
+                  "local": vacina["local"].toString(),
+                },
+              ).toList();
+
+          campanhas =
+              List<Map<String, dynamic>>.from(
+                resultado["campanhas"] ?? [],
+              ).map(
+                (campanha) => {
+                  "titulo": campanha["titulo"].toString(),
+                  "descricao":
+                      campanha["descricao"]?.toString() ??
+                      "Sem descrição.",
+                  "periodo":
+                      "${_formatarData(campanha["data_inicio"].toString())} até "
+                      "${_formatarData(campanha["data_fim"].toString())}",
+                },
+              ).toList();
+
+          _carregando = false;
+          _erro = null;
+        });
+      } else {
+        setState(() {
+          _carregando = false;
+          _erro =
+              resultado["mensagem"] ??
+              "Não foi possível carregar os dados.";
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _carregando = false;
+        _erro =
+            "Não foi possível conectar com o servidor.";
+      });
+    }
+  }
+
+  // ============================================================
+  // FORMATA DATA
+  // ============================================================
+
+  String _formatarData(String data) {
+    if (data.length == 10 && data.contains("-")) {
+      final partes = data.split("-");
+
+      return "${partes[2]}/${partes[1]}/${partes[0]}";
+    }
+
+    return data;
+  }
+
+  // ============================================================
+  // CONTEÚDO DA ABA
+  // ============================================================
+
+  Widget _conteudoSelecionado() {
+    if (_carregando) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_erro != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(30),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 60,
+                color: AppColors.azulMedio,
+              ),
+              const SizedBox(height: 20),
+              Text(
+                _erro!,
+                style: AppTextStyles.texto,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _carregarVacinacao,
+                child: const Text("Tentar novamente"),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    switch (_abaSelecionada) {
+      case 1:
+        return _ListaProximasDoses(
+          proximasDoses: proximasDoses,
+        );
+
+      case 2:
+        return _ListaCampanhas(
+          campanhas: campanhas,
+        );
+
+      default:
+        return _ListaMinhasVacinas(
+          vacinas: minhasVacinas,
+        );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,9 +177,14 @@ class _VacinacaoScreenState extends State<VacinacaoScreen> {
         children: [
           const SizedBox(height: 15),
 
-          // Abas
+          // ======================================================
+          // ABAS
+          // ======================================================
+
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -137,27 +239,7 @@ class _VacinacaoScreenState extends State<VacinacaoScreen> {
       ),
     );
   }
-
-  Widget _conteudoSelecionado() {
-    switch (_abaSelecionada) {
-      case 1:
-        return _ListaProximasDoses(
-          proximasDoses: proximasDoses,
-        );
-
-      case 2:
-        return _ListaCampanhas(
-          campanhas: campanhas,
-        );
-
-      default:
-        return _ListaMinhasVacinas(
-          vacinas: minhasVacinas,
-        );
-    }
-  }
 }
-
 
 // ============================================================
 // BOTÃO DAS ABAS
@@ -195,11 +277,11 @@ class _BotaoAba extends StatelessWidget {
 
         child: Text(
           titulo,
+
           style: AppTextStyles.textoPequeno.copyWith(
             color: selecionado
                 ? AppColors.branco
                 : AppColors.azulEscuro,
-
             fontWeight: FontWeight.bold,
           ),
 
@@ -209,7 +291,6 @@ class _BotaoAba extends StatelessWidget {
     );
   }
 }
-
 
 // ============================================================
 // MINHAS VACINAS
@@ -244,7 +325,9 @@ class _ListaMinhasVacinas extends StatelessWidget {
         final vacina = vacinas[index];
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.only(
+            bottom: 16,
+          ),
 
           child: _VacinaCard(
             vacina: vacina['vacina']!,
@@ -257,7 +340,6 @@ class _ListaMinhasVacinas extends StatelessWidget {
     );
   }
 }
-
 
 // ============================================================
 // CARD DE VACINA
@@ -367,7 +449,6 @@ class _VacinaCard extends StatelessWidget {
   }
 }
 
-
 // ============================================================
 // PRÓXIMAS DOSES
 // ============================================================
@@ -383,7 +464,8 @@ class _ListaProximasDoses extends StatelessWidget {
   Widget build(BuildContext context) {
     if (proximasDoses.isEmpty) {
       return const _SemVacinas(
-        mensagem: 'Nenhuma próxima dose registrada.',
+        mensagem:
+            'Nenhuma próxima dose registrada.',
       );
     }
 
@@ -401,7 +483,9 @@ class _ListaProximasDoses extends StatelessWidget {
         final vacina = proximasDoses[index];
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.only(
+            bottom: 16,
+          ),
 
           child: _ProximaDoseCard(
             vacina: vacina['vacina']!,
@@ -414,7 +498,6 @@ class _ListaProximasDoses extends StatelessWidget {
     );
   }
 }
-
 
 // ============================================================
 // CARD DA PRÓXIMA DOSE
@@ -494,7 +577,8 @@ class _ProximaDoseCard extends StatelessWidget {
           const SizedBox(height: 15),
 
           _InformacaoVacina(
-            icone: Icons.medical_information_outlined,
+            icone:
+                Icons.medical_information_outlined,
             titulo: 'Dose',
             valor: dose,
           ),
@@ -502,7 +586,8 @@ class _ProximaDoseCard extends StatelessWidget {
           const SizedBox(height: 10),
 
           _InformacaoVacina(
-            icone: Icons.calendar_today_outlined,
+            icone:
+                Icons.calendar_today_outlined,
             titulo: 'Data prevista',
             valor: data,
           ),
@@ -510,7 +595,8 @@ class _ProximaDoseCard extends StatelessWidget {
           const SizedBox(height: 10),
 
           _InformacaoVacina(
-            icone: Icons.location_on_outlined,
+            icone:
+                Icons.location_on_outlined,
             titulo: 'UBS',
             valor: local,
           ),
@@ -519,7 +605,6 @@ class _ProximaDoseCard extends StatelessWidget {
     );
   }
 }
-
 
 // ============================================================
 // CAMPANHAS
@@ -554,7 +639,9 @@ class _ListaCampanhas extends StatelessWidget {
         final campanha = campanhas[index];
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.only(
+            bottom: 16,
+          ),
 
           child: _CampanhaCard(
             titulo: campanha['titulo']!,
@@ -566,7 +653,6 @@ class _ListaCampanhas extends StatelessWidget {
     );
   }
 }
-
 
 // ============================================================
 // CARD DA CAMPANHA
@@ -663,7 +749,8 @@ class _CampanhaCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   periodo,
-                  style: AppTextStyles.textoPequeno.copyWith(
+                  style:
+                      AppTextStyles.textoPequeno.copyWith(
                     color: AppColors.azulMedio,
                     fontWeight: FontWeight.bold,
                   ),
@@ -676,7 +763,6 @@ class _CampanhaCard extends StatelessWidget {
     );
   }
 }
-
 
 // ============================================================
 // INFORMAÇÃO DA VACINA
@@ -724,7 +810,6 @@ class _InformacaoVacina extends StatelessWidget {
     );
   }
 }
-
 
 // ============================================================
 // SEM VACINAS
